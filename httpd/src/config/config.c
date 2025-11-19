@@ -1,11 +1,13 @@
-#include "string.h"
 #include "config.h"
 
+#include <getopt.h>
 #include <stdlib.h>
 #include <string.h>
-#include <getopt.h>
 
-static int parse_option(struct config *out, struct server_config *server, int token, char *optarg)
+#include "../utils/string/string.h"
+
+static int fill_struct(struct config *out, struct server_config *server,
+                       int token, char *optarg)
 {
     if (token == 'p')
     {
@@ -17,7 +19,14 @@ static int parse_option(struct config *out, struct server_config *server, int to
     }
     else if (token == 'l')
     {
-        out->log = (strcmp(optarg, "true") == 0);
+        if (strcmp(optarg, "true"))
+        {
+            out->log = false;
+        }
+        else
+        {
+            out->log = true;
+        }
     }
     else if (token == 's')
     {
@@ -41,13 +50,13 @@ static int parse_option(struct config *out, struct server_config *server, int to
     }
     else if (token == 'x')
     {
-        if (strcmp(optarg, "start") == 0)
-        {
-            out->daemon = START;
-        }
-        else if (strcmp(optarg, "stop") == 0)
+        if (strcmp(optarg, "stop") == 0)
         {
             out->daemon = STOP;
+        }
+        else if (strcmp(optarg, "start") == 0)
+        {
+            out->daemon = START;
         }
         else if (strcmp(optarg, "restart") == 0)
         {
@@ -65,7 +74,7 @@ static int parse_option(struct config *out, struct server_config *server, int to
     return 0;
 }
 
-static int validate_config(struct config *out)
+static int check(struct config *out)
 {
     struct server_config *server = out->servers;
 
@@ -74,11 +83,8 @@ static int validate_config(struct config *out)
         server->default_file = strdup("index.html");
     }
 
-    if (!out->pid_file ||
-        !server->server_name ||
-        !server->port ||
-        !server->ip ||
-        !server->root_dir)
+    if (!out->pid_file || !server->server_name || !server->port || !server->ip
+        || !server->root_dir)
     {
         return -1;
     }
@@ -104,36 +110,32 @@ struct config *parse_configuration(int argc, char *argv[])
         return NULL;
     }
     struct server_config *server = out->servers;
-
-    static struct option long_opts[] = {
-        {"pid_file", required_argument, NULL, 'p'},
-        {"log_file", required_argument, NULL, 'f'},
-        {"log", required_argument, NULL, 'l'},
-        {"server_name", required_argument, NULL, 's'},
-        {"port", required_argument, NULL, 'o'},
-        {"ip", required_argument, NULL, 'i'},
-        {"root_dir", required_argument, NULL, 'r'},
-        {"default_file", required_argument, NULL, 'd'},
-        {"daemon", required_argument, NULL, 'x'},
-        {0, 0, 0, 0}
+    static struct option long_options[] = {
+        { "pid_file", required_argument, NULL, 'p' },
+        { "log_file", required_argument, NULL, 'f' },
+        { "log", required_argument, NULL, 'l' },
+        { "server_name", required_argument, NULL, 's' },
+        { "port", required_argument, NULL, 'o' },
+        { "ip", required_argument, NULL, 'i' },
+        { "root_dir", required_argument, NULL, 'r' },
+        { "default_file", required_argument, NULL, 'd' },
+        { "daemon", required_argument, NULL, 'x' },
+        { 0, 0, 0, 0 }
     };
-
     int token;
-    while ((token = getopt_long(argc, argv, "", long_opts, NULL)) != -1)
+    while ((token = getopt_long(argc, argv, "", long_options, NULL)) != -1)
     {
-        if (parse_option(out, server, token, optarg) != 0)
+        if (fill_struct(out, server, token, optarg) != 0)
         {
             config_destroy(out);
             return NULL;
         }
     }
-
-    if (validate_config(out) != 0)
+    if (check(out) != 0)
     {
         config_destroy(out);
         return NULL;
     }
-
     return out;
 }
 
@@ -152,10 +154,14 @@ void config_destroy(struct config *config)
         {
             string_destroy(server->server_name);
         }
-        free(server->port);
-        free(server->ip);
-        free(server->root_dir);
-        free(server->default_file);
+        if (server->port)
+            free(server->port);
+        if (server->ip)
+            free(server->ip);
+        if (server->root_dir)
+            free(server->root_dir);
+        if (server->default_file)
+            free(server->default_file);
         free(server);
     }
     free(config);
