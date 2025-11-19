@@ -137,7 +137,6 @@ struct config *parse_configuration(int argc, char *argv[])
     return out;
 }
 
-// Destroy configuration and free memory
 void config_destroy(struct config *config)
 {
     if (!config)

@@ -1,6 +1,7 @@
 #ifndef STRING_H
 #define STRING_H
 
+#include <ctype.h>
 #include <stddef.h>
 
 struct string
@@ -22,7 +23,7 @@ struct string
 struct string *string_create(const char *str, size_t size);
 
 /*
- ** @brief Act like strncmp(3) but for struct string and char *
+ ** @brief Act like memcmp(3) but for struct string and char *
  **
  ** @param str1
  ** @param str2
@@ -33,15 +34,11 @@ struct string *string_create(const char *str, size_t size);
 int string_compare_n_str(const struct string *str1, const char *str2, size_t n);
 
 /*
- ** @brief Concatenate a char* with its size in a struct string by appending the
- **        second string, to_concat, to the first one, str.
- **        Be careful, to_concat may contain null bytes
+ ** @brief Concat a char * with its size in a struct string
  **
  ** @param str
  ** @param to_concat
  ** @param size
- **
- ** @return
  */
 void string_concat_str(struct string *str, const char *to_concat, size_t size);
 
