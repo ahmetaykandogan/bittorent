@@ -10,7 +10,6 @@
 #include <unistd.h>
 
 #define BUFFER_SIZE 1024
-#define LOGGER(FMT, ...) fprintf(stderr, FMT, ##__VA_ARGS__)
 
 void respond(int client_fd, const char *buffer, ssize_t bytes)
 {
@@ -22,7 +21,6 @@ void respond(int client_fd, const char *buffer, ssize_t bytes)
         sent = send(client_fd, buffer + total, bytes - total, 0);
         if (sent == -1)
         {
-            LOGGER("Send failed\n");
             return;
         }
         total += sent;
@@ -38,7 +36,6 @@ int create_and_bind(const char *node, const char *service)
     struct addrinfo *res = NULL;
     if (getaddrinfo(node, service, &hints, &res) == -1)
     {
-        LOGGER("create_and_bind: failed getaddrinfo\n");
         return -1;
     }
 
@@ -68,7 +65,6 @@ void communicate(int client_fd)
     char buffer[BUFFER_SIZE];
     while ((bytes = recv(client_fd, buffer, BUFFER_SIZE, 0)) > 0)
     {
-        LOGGER("Received: %s", buffer);
         respond(client_fd, buffer, bytes);
     }
 }
@@ -84,10 +80,8 @@ void start_server(int server_socket)
         int cfd = accept(server_socket, NULL, NULL);
         if (cfd != -1)
         {
-            LOGGER("Client connected\n");
             communicate(cfd);
             close(cfd);
-            LOGGER("Client disconnected\n");
         }
     }
 }

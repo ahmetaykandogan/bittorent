@@ -102,7 +102,6 @@ struct config *parse_configuration(int argc, char *argv[])
     }
     out->log = true;
     out->daemon = NO_OPTION;
-
     out->servers = calloc(1, sizeof(struct server_config));
     if (!out->servers)
     {
@@ -135,6 +134,10 @@ struct config *parse_configuration(int argc, char *argv[])
     {
         config_destroy(out);
         return NULL;
+    }
+    if (out->daemon != NO_OPTION && !out->log_file)
+    {
+        out->log_file = strdup("HTTPd.log");
     }
     return out;
 }

@@ -3,6 +3,8 @@
 #include <stdlib.h>
 #include <string.h>
 
+// #include <stdio.h>
+
 struct string *string_create(const char *str, size_t size)
 {
     struct string *out = calloc(1, sizeof(struct string));
@@ -28,14 +30,6 @@ int string_compare_n_str(const struct string *str1, const char *str2, size_t n)
 {
     for (size_t i = 0; i < n; i++)
     {
-        if (i >= str1->size)
-        {
-            break;
-        }
-        if (i >= strlen(str2))
-        {
-            break;
-        }
         if (str1->data[i] > str2[i])
         {
             return 1;
@@ -66,3 +60,14 @@ void string_destroy(struct string *str)
         free(str);
     }
 }
+
+/*
+int main(void)
+{
+    char *str1 = "abc\0ed";
+    struct string *strstruct = string_create("abc\0\0ed", 7);
+    int out = string_compare_n_str(strstruct, str1, 6);
+    printf("%d", out);
+    string_destroy(strstruct);
+}
+*/
