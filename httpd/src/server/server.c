@@ -19,7 +19,7 @@ void respond(int client_fd, const char *buffer, ssize_t bytes)
     // printf("%s this is buffer", buffer);
     while (total != bytes)
     {
-        sent = send(client_fd, buffer, bytes, 0);
+        sent = send(client_fd, buffer + total, bytes - total, 0);
         if (sent == -1)
         {
             LOGGER("Send failed\n");

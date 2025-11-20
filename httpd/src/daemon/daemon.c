@@ -28,12 +28,18 @@ static int check_pid(FILE *file, int is_it_void)
     }
     return 1;
 }
-/*
-static int fill_pid_file(FILE *file, pid_t var)
+static void kill_pid(FILE *file)
 {
-    fprintf(file, "%ld", var);
+    char *buf = NULL;
+    size_t len = 0;
+    getline(&buf, &len, file);
+    int pid_to_kill = atoi(buf);
+    int check = kill(pid_to_check, SIGTERM);
+    if (check == 0)
+    {
+        waitpid(pid_to_kill, NULL, 0);
+    }
 }
-*/
 
 int daemonize(struct config *config)
 {
@@ -44,13 +50,13 @@ int daemonize(struct config *config)
         file = fopen(config->pid_file, "w+");
         is_it_void = 1;
     }
+    int check = check_pid(file, is_it_void);
     if (config->daemon == NO_OPTION)
     {
         return 1;
     }
     else if (config->daemon == START)
     {
-        int check = check_pid(file, is_it_void);
         if (check == -1)
         {
             return -1;
@@ -64,10 +70,15 @@ int daemonize(struct config *config)
             return 3; //so the main can understand this is the parent
         }
         return 1;
-
     }
     else if (config->daemon == STOP)
     {
+        if (check == -1) //meaning a pid is running and need to be killed
+        {
+            kill_pid(file); //the pid stopped running here
+            fclose(file); //close the file cause I will delete it after
+        }
+        remove(config->pid_file); 
         return 1;
     }
     else if (config->daemon == RESTART)
