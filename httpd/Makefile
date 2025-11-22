@@ -1,8 +1,8 @@
 CC = gcc
 
-CFLAGS =-pedantic -Werror -Wall -Wextra -Wvla
+CFLAGS =-std=c99 -pedantic -Werror -Wall -Wextra -Wvla
 
-SRCS = src/utils/string/string.c src/config/config.c src/server/server.c src/main.c src/daemon/daemon.c
+SRCS = src/utils/string/string.c src/config/config.c src/server/server.c src/main.c src/daemon/daemon.c src/utils/time/time.c src/utils/parser/parser.c
 
 OBJS = $(SRCS:.c=.o)
 
