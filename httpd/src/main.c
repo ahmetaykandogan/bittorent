@@ -7,21 +7,19 @@
 int main(int argc, char *argv[])
 {
     struct config *configuration = parse_configuration(argc, argv);
+    if (!configuration)
+    {
+        return 2;
+    }
     char *ip = configuration->servers->ip;
     char *port = configuration->servers->port;
     int check = daemonize(configuration);
     if (check == -1)
     {
         config_destroy(configuration);
-        return 2;
+        return 1;
     }
-    // STOP signal
-    if (check == 2)
-    {
-        config_destroy(configuration);
-        return 0;
-    }
-    if (check == 3)
+    if (check == 2 || check == 3)
     {
         config_destroy(configuration);
         return 0;
@@ -34,4 +32,5 @@ int main(int argc, char *argv[])
     }
     start_server(socket_fd, configuration);
     close(socket_fd);
+    return 0;
 }

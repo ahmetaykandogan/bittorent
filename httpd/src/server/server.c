@@ -1,6 +1,5 @@
-#define _POSIX_C_SOURCE 200112L
+#define _POSIX_C_SOURCE 200809L
 #include "server.h"
-
 #include <err.h>
 #include <netdb.h>
 #include <stddef.h>
@@ -10,65 +9,167 @@
 #include <sys/socket.h>
 #include <sys/types.h>
 #include <unistd.h>
-
+#include <fcntl.h>
+#include <sys/stat.h>
+#include <sys/sendfile.h>
+#include <errno.h>
 #include "../utils/parser/parser.h"
 #include "../utils/time/time.h"
 
 #define BUFFER_SIZE 1024
-static char *create_respond(const char *buffer, struct response *resp,
-                            char *out)
+
+struct response *create_response(struct config *config)
 {
-    parser(buffer, resp);
-    char time_in[80];
-    char *time = print_date(time_in);
-    int length = 12;
-    sprintf(out, "%s 200 OK\r\n%s\r\nContent-Length: %d\r\nConnection: close\r\n", resp->http_type, time,length);
+    struct response *out = calloc(1, sizeof(*out));
+    if (!out)
+    {
+        return NULL;
+    }
+    out->http_type = strdup("HTTP/1.1");
+    out->get_or_head = 0;
+    out->content = NULL;
+    if (config && config->servers && config->servers->root_dir)
+    {
+        out->file = strdup(config->servers->root_dir);
+    }
+    else
+    {
+        out->file = strdup("");
+    }
+    out->config = config;
     return out;
 }
-static void respond(int client_fd, const char *buffer, ssize_t bytes,
-                    struct response *resp)
+
+static int build_output(char *out, size_t max, const char *httptype, const char *status, size_t content_length)
 {
-    ssize_t total = 0;
-    ssize_t sent = 0;
-    char out[200];
-    char *sending = create_respond(buffer, resp, out);
-    sent = send(client_fd, sending, strlen(sending), 0);
-    while (total != bytes && total == 5454)
+    char date[128];
+    print_date(date);
+    return snprintf(out, max,
+        "%s %s\r\n"
+        "%s\r\n"
+        "Content-Length: %zu\r\n"
+        "Connection: close\r\n"
+        "\r\n",
+        httptype,
+        status,
+        date,
+        content_length);
+}
+
+static void send_total(int file, const char *buf, size_t len)
+{
+    size_t total = 0;
+    while (total < len)
     {
-        sent = send(client_fd, buffer + total, bytes - total, 0);
-        if (sent == -1)
+        ssize_t s = send(file, buf + total, len - total, 0);
+        if (s <= 0)
         {
             return;
         }
-        total += sent;
+        total += s;
     }
 }
+
+static void error(int file, struct response *resp, const char *status, const char *in)
+{
+    char out[512];
+    size_t len = strlen(in);
+    int out_size = build_output(out, sizeof(out), resp->http_type, status, len);
+    if (out_size > 0)
+    {
+        send_total(file, out, out_size);
+    }
+    if (resp->get_or_head == 1)
+    {
+        return;
+    }
+    send_total(file, in, len);
+}
+
+void respond(int client_fd, struct response *resp)
+{
+    if (!resp)
+    {
+        return;
+    }
+    if (resp->get_or_head == -1)
+    {
+        error(client_fd, resp, "405 Method Not Allowed", "Method Not Allowed\n");
+        return;
+    }
+    if (resp->get_or_head == -2)
+    {
+        error(client_fd, resp, "505 HTTP Version Not Supported", "HTTP Version Not Supported\n");
+        return;
+    }
+    int file = open(resp->file, O_RDONLY);
+    if (file == -1)
+    {
+        if (errno == EACCES)
+        {
+            error(client_fd, resp, "403 Forbidden", "Forbidden\n");
+        }
+        else
+        {
+            error(client_fd, resp, "404 Not Found", "Not Found\n");
+        }
+        return;
+    }
+    struct stat stats;
+    if (fstat(file, &stats) == -1)
+    {
+        close(file);
+        error(client_fd, resp, "500 Internal Server Error", "Internal Error");
+        return;
+    }
+    char out[512];
+    int out_size = build_output(out, sizeof(out), resp->http_type, "200 OK", stats.st_size);
+    if (out_size > 0)
+        send_total(client_fd, out, out_size);
+
+    if (resp->get_or_head == 1)
+    {
+        close(file);
+        return;
+    }
+    off_t offset = 0;
+    ssize_t remain = stats.st_size;
+    while (remain > 0)
+    {
+        ssize_t s = sendfile(client_fd, file, &offset, remain);
+        if (s <= 0)
+        {
+            break;
+        }
+        remain -= s;
+    }
+
+    close(file);
+}
+
 int create_and_bind(const char *node, const char *service)
 {
-    struct addrinfo hints = { 0 };
+    struct addrinfo hints = {0};
     hints.ai_family = AF_INET;
     hints.ai_socktype = SOCK_STREAM;
     hints.ai_protocol = IPPROTO_TCP;
 
     struct addrinfo *res = NULL;
-    if (getaddrinfo(node, service, &hints, &res) == -1)
-    {
+    if (getaddrinfo(node, service, &hints, &res) != 0)
         return -1;
-    }
 
     int sockfd = -1;
-
     for (struct addrinfo *p = res; p != NULL; p = p->ai_next)
     {
         sockfd = socket(p->ai_family, p->ai_socktype, p->ai_protocol);
         if (sockfd == -1)
             continue;
-
-        int yes = -1;
+        int yes = 1;
         setsockopt(sockfd, SOL_SOCKET, SO_REUSEADDR, &yes, sizeof(yes));
 
         if (bind(sockfd, p->ai_addr, p->ai_addrlen) != -1)
             break;
+
         close(sockfd);
         sockfd = -1;
     }
@@ -76,43 +177,56 @@ int create_and_bind(const char *node, const char *service)
     freeaddrinfo(res);
     return sockfd;
 }
+
 static void communicate(int client_fd, struct response *resp)
 {
     ssize_t bytes = 0;
-    char buffer[BUFFER_SIZE] = { 0 };
+    char buffer[BUFFER_SIZE];
     char *total = calloc(1024, 1);
+    if (!total)
+        return;
+
     int actual_size = 1024;
     int total_bytes = 0;
     int counter = 0;
+
     while ((bytes = recv(client_fd, buffer, BUFFER_SIZE, 0)) > 0)
     {
         total_bytes += bytes;
+
         if (total_bytes > actual_size)
         {
             actual_size += 1024;
-            total = realloc(total, actual_size);
+            char *tmp = realloc(total, actual_size);
+            if (!tmp)
+            {
+                free(total);
+                return;
+            }
+            total = tmp;
             memset(total + actual_size - 1024, 0, 1024);
         }
-        for (int i = 0; i < bytes; i++)
-        {
+
+        int i;
+        for (i = 0; i < bytes; i++)
             total[counter++] = buffer[i];
-        }
-        size_t i = strlen(total);
-        // do the same for last 4
-        if (total[i - 1] == '\n' && total[i - 2] == '\r')
-        {
+
+        total[counter] = '\0';
+
+        if (strstr(total, "\r\n\r\n"))
             break;
-        }
     }
-    respond(client_fd, total, bytes, resp);
+
+    parser(total, resp);
+    respond(client_fd, resp);
+    free(total);
 }
 
 void start_server(int server_socket, struct config *config)
 {
     if (listen(server_socket, SOMAXCONN) == -1)
-    {
         return;
-    }
+
     while (1)
     {
         int cfd = accept(server_socket, NULL, NULL);

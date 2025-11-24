@@ -10,7 +10,6 @@ char *print_date(char *out)
     time(&rawtime);
     info = gmtime(&rawtime);
     strftime(out, 80, "Date: %a, %d %b %Y %H:%M:%S %Z\n", info);
-    // printf("%s\n", timeStr);
     return out;
 }
 /*
