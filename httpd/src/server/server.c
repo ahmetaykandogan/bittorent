@@ -1,22 +1,41 @@
 #define _POSIX_C_SOURCE 200809L
 #include "server.h"
+
 #include <err.h>
+#include <errno.h>
+#include <fcntl.h>
 #include <netdb.h>
+#include <signal.h>
 #include <stddef.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <sys/sendfile.h>
 #include <sys/socket.h>
+#include <sys/stat.h>
 #include <sys/types.h>
 #include <unistd.h>
-#include <fcntl.h>
-#include <sys/stat.h>
-#include <sys/sendfile.h>
-#include <errno.h>
+
 #include "../utils/parser/parser.h"
 #include "../utils/time/time.h"
 
 #define BUFFER_SIZE 1024
+
+static int signal_kill = 0;
+
+void sk(int sig)
+{
+    // printf("Entered sk\n");
+    if (sig == SIGINT)
+    {
+        signal_kill = 1;
+    }
+    else if (sig == SIGPIPE)
+    {
+        return;
+    }
+    return;
+}
 
 struct response *create_response(struct config *config)
 {
@@ -40,20 +59,18 @@ struct response *create_response(struct config *config)
     return out;
 }
 
-static int build_output(char *out, size_t max, const char *httptype, const char *status, size_t content_length)
+static int build_output(char *out, size_t max, const char *httptype,
+                        const char *status, size_t content_length)
 {
-    char date[128];
+    char date[200];
     print_date(date);
     return snprintf(out, max,
-        "%s %s\r\n"
-        "%s\r\n"
-        "Content-Length: %zu\r\n"
-        "Connection: close\r\n"
-        "\r\n",
-        httptype,
-        status,
-        date,
-        content_length);
+                    "%s %s\r\n"
+                    "%s\r\n"
+                    "Content-Length: %zu\r\n"
+                    "Connection: close\r\n"
+                    "\r\n",
+                    httptype, status, date, content_length);
 }
 
 static void send_total(int file, const char *buf, size_t len)
@@ -70,9 +87,10 @@ static void send_total(int file, const char *buf, size_t len)
     }
 }
 
-static void error(int file, struct response *resp, const char *status, const char *in)
+static void error(int file, struct response *resp, const char *status,
+                  const char *in)
 {
-    char out[512];
+    char out[1000];
     size_t len = strlen(in);
     int out_size = build_output(out, sizeof(out), resp->http_type, status, len);
     if (out_size > 0)
@@ -94,12 +112,13 @@ void respond(int client_fd, struct response *resp)
     }
     if (resp->get_or_head == -1)
     {
-        error(client_fd, resp, "405 Method Not Allowed", "Method Not Allowed\n");
+        error(client_fd, resp, "405 Method Not Allowed", "");
         return;
     }
     if (resp->get_or_head == -2)
     {
-        error(client_fd, resp, "505 HTTP Version Not Supported", "HTTP Version Not Supported\n");
+        error(client_fd, resp, "505 HTTP Version Not Supported",
+              "HTTP Version Not Supported\n");
         return;
     }
     int file = open(resp->file, O_RDONLY);
@@ -107,23 +126,19 @@ void respond(int client_fd, struct response *resp)
     {
         if (errno == EACCES)
         {
-            error(client_fd, resp, "403 Forbidden", "Forbidden\n");
+            error(client_fd, resp, "403 Forbidden", "");
         }
         else
         {
-            error(client_fd, resp, "404 Not Found", "Not Found\n");
+            error(client_fd, resp, "404 Not Found", "");
         }
         return;
     }
     struct stat stats;
-    if (fstat(file, &stats) == -1)
-    {
-        close(file);
-        error(client_fd, resp, "500 Internal Server Error", "Internal Error");
-        return;
-    }
-    char out[512];
-    int out_size = build_output(out, sizeof(out), resp->http_type, "200 OK", stats.st_size);
+    stat(resp->file, &stats);
+    char out[1000];
+    int out_size = build_output(out, sizeof(out), resp->http_type, "200 OK",
+                                stats.st_size);
     if (out_size > 0)
         send_total(client_fd, out, out_size);
 
@@ -149,7 +164,7 @@ void respond(int client_fd, struct response *resp)
 
 int create_and_bind(const char *node, const char *service)
 {
-    struct addrinfo hints = {0};
+    struct addrinfo hints = { 0 };
     hints.ai_family = AF_INET;
     hints.ai_socktype = SOCK_STREAM;
     hints.ai_protocol = IPPROTO_TCP;
@@ -226,8 +241,7 @@ void start_server(int server_socket, struct config *config)
 {
     if (listen(server_socket, SOMAXCONN) == -1)
         return;
-
-    while (1)
+    while (signal_kill == 0)
     {
         int cfd = accept(server_socket, NULL, NULL);
         if (cfd != -1)

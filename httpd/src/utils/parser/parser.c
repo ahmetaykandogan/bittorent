@@ -1,8 +1,9 @@
 #include "parser.h"
 
-#include "../../config/config.h"
 #include <stdlib.h>
 #include <string.h>
+
+#include "../../config/config.h"
 
 void parser(const char *req, struct response *fill)
 {
@@ -67,7 +68,6 @@ void parser(const char *req, struct response *fill)
         return;
     }
 }
-
 
 void destroy_response(struct response *out)
 {

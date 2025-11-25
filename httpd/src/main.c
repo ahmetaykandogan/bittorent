@@ -1,11 +1,26 @@
+#define _POSIX_C_SOURCE 200809L
+
 #include <err.h>
+#include <signal.h>
+#include <stdio.h>
+#include <stdlib.h>
 
 #include "config/config.h"
 #include "daemon/daemon.h"
 #include "server/server.h"
 #include "utils/parser/parser.h"
+
 int main(int argc, char *argv[])
 {
+    struct sigaction siga;
+    siga.sa_flags = 0;
+    siga.sa_handler = sk;
+    if (sigemptyset(&siga.sa_mask) < 0)
+    {
+        return 2;
+    }
+    sigaction(SIGINT, &siga, NULL);
+    sigaction(SIGPIPE, &siga, NULL);
     struct config *configuration = parse_configuration(argc, argv);
     if (!configuration)
     {
@@ -32,5 +47,6 @@ int main(int argc, char *argv[])
     }
     start_server(socket_fd, configuration);
     close(socket_fd);
+    config_destroy(configuration);
     return 0;
 }

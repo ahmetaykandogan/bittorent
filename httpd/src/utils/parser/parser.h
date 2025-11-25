@@ -5,9 +5,9 @@
 
 struct response
 {
-    int get_or_head; //0 is get, 1 is head
+    int get_or_head; // 0 is get, 1 is head
     char *http_type;
-    //date
+    // date
     char *content; // the body
     char *file; // where the file to read is
     struct config *config;

@@ -1,10 +1,11 @@
 #define _POSIX_C_SOURCE 200809L
 
 #include "daemon.h"
+
 #include <signal.h>
+#include <stdio.h>
 #include <stdlib.h>
 #include <sys/wait.h>
-#include <stdio.h>
 #include <unistd.h>
 
 static int read_line(FILE *file)
@@ -14,7 +15,8 @@ static int read_line(FILE *file)
     char *buf = NULL;
     size_t len = 0;
 
-    if (getline(&buf, &len, file) == -1) {
+    if (getline(&buf, &len, file) == -1)
+    {
         free(buf);
         return -1;
     }
@@ -60,7 +62,8 @@ int daemonize(struct config *config)
         pid = read_line(file);
     }
     int check = check_pid(pid, is_it_void);
-    if (config->daemon == START) {
+    if (config->daemon == START)
+    {
         if (check == -1)
             return -1;
         pid_t var = fork();
@@ -74,7 +77,8 @@ int daemonize(struct config *config)
         }
         return 1;
     }
-    else if (config->daemon == STOP) {
+    else if (config->daemon == STOP)
+    {
         if (check == -1)
             kill_pid(pid);
 
@@ -82,8 +86,8 @@ int daemonize(struct config *config)
         remove(config->pid_file);
         return 2;
     }
-    else if (config->daemon == RESTART) {
-
+    else if (config->daemon == RESTART)
+    {
         if (check == -1)
             kill_pid(pid);
 
@@ -91,7 +95,8 @@ int daemonize(struct config *config)
         remove(config->pid_file);
 
         pid_t var = fork();
-        if (var) {
+        if (var)
+        {
             file = fopen(config->pid_file, "w");
             fprintf(file, "%d\n", var);
             fclose(file);

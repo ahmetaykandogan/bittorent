@@ -9,7 +9,7 @@ char *print_date(char *out)
     struct tm *info;
     time(&rawtime);
     info = gmtime(&rawtime);
-    strftime(out, 80, "Date: %a, %d %b %Y %H:%M:%S %Z\n", info);
+    strftime(out, 80, "Date: %a, %d %b %Y %H:%M:%S %Z", info);
     return out;
 }
 /*
